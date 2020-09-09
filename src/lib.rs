@@ -41,12 +41,12 @@ impl Pcg {
 
 impl RngCore for Pcg {
     fn next_u32(&mut self) -> u32 {
-        self.next_u64() as u32
+        self.state = (Wrapping(self.state) * Wrapping(MULTIPLIER)).0;
+        ((self.state ^ (self.state >> 22)) >> (22 + (self.state >> 61))) as u32
     }
 
     fn next_u64(&mut self) -> u64 {
-        self.state = (Wrapping(self.state) * Wrapping(MULTIPLIER)).0;
-        (self.state ^ (self.state >> 22)) >> (22 + (self.state >> 61))
+        ((self.next_u32() as u64) << 32) ^ (self.next_u32() as u64)
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
@@ -108,8 +108,10 @@ mod tests {
     #[test]
     fn test_next_u64() {
         let seed = rand::random::<u64>();
-        let state = (Wrapping(seed) * Wrapping(MULTIPLIER)).0;
-        let next = (state ^ (state >> 22)) >> (22 + (state >> 61));
+        let mut state = (Wrapping(seed) * Wrapping(MULTIPLIER)).0;
+        let mut next: u64 = (state ^ (state >> 22)) >> (22 + (state >> 61)) << 32;
+        state = (Wrapping(state) * Wrapping(MULTIPLIER)).0;
+        next ^= ((state ^ (state >> 22)) >> (22 + (state >> 61))) & 0xFFFFFFFF;
 
         let mut pcg = Pcg::seed_from_u64(seed);
         assert_eq!(pcg.next_u64(), next);
@@ -132,41 +134,42 @@ mod tests {
         let next = (state ^ (state >> 22)) >> (22 + (state >> 61));
         let secondstate = (Wrapping(state) * Wrapping(MULTIPLIER)).0;
         let secondnext = (secondstate ^ (secondstate >> 22)) >> (22 + (secondstate >> 61));
-        let mut next_sixteen_expected_bytes = [0; 16];
-        for i in 0..8 {
-            next_sixteen_expected_bytes[i] = ((next >> 8 * i) % 256) as u8;
+        let mut next_eight_expected_bytes = [0; 8];
+        for i in 0..4 {
+            next_eight_expected_bytes[i + 4] = ((next >> 8 * i) % 256) as u8;
         }
-        for i in 0..8 {
-            next_sixteen_expected_bytes[i + 8] = ((secondnext >> 8 * i) % 256) as u8;
+        for i in 0..4 {
+            next_eight_expected_bytes[i] = ((secondnext >> 8 * i) % 256) as u8;
         }
 
-        let mut arr = [0; 16];
+        let mut arr = [0; 8];
         let mut pcg = Pcg::seed_from_u64(seed);
         pcg.fill_bytes(&mut arr);
-        assert_eq!(arr, next_sixteen_expected_bytes);
+        assert_eq!(arr, next_eight_expected_bytes);
 
         pcg = Pcg::seed_from_u64(seed);
         assert!(pcg.try_fill_bytes(&mut arr).is_ok());
-        assert_eq!(arr, next_sixteen_expected_bytes);
+        assert_eq!(arr, next_eight_expected_bytes);
     }
 
     #[test]
     fn test_skip() {
         let seed = rand::random::<u64>();
         let state = (Wrapping(seed) * Wrapping(MULTIPLIER) * Wrapping(MULTIPLIER)).0;
-        let next = (state ^ (state >> 22)) >> (22 + (state >> 61));
+        let next = ((state ^ (state >> 22)) >> (22 + (state >> 61))) as u32;
 
         let mut pcg = Pcg::seed_from_u64(seed);
         pcg.skip(1);
-        assert_eq!(pcg.next_u64(), next);
+        assert_eq!(pcg.next_u32(), next);
     }
 
     #[test]
     fn test_skip_backwards() {
         let seed = rand::random::<u64>();
+        let skips = rand::random::<i8>();
         let mut pcg = Pcg::seed_from_u64(seed);
-        pcg.skip(3);
-        pcg.skip(-3);
+        pcg.skip(skips as i32);
+        pcg.skip(-skips as i32);
         assert_eq!(pcg.get_state(), seed);
     }
 
