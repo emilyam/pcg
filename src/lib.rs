@@ -1,3 +1,27 @@
+/*! This is an implementation of a PRNG from the PCG family.
+ *  Specifically, it implements PCG-XSH-RS-64/32 (MCG).
+ *  For more information on the PCG family of PRNGs,
+ *  see https://www.pcg-random.org/paper.html
+ *
+ *  Although the specific algorithm implemented is
+ *  reasonably secure, this implementation has not been
+ *  thoroughly tested and should be assumed not to be secure.
+ *  It is not suitable for secure applications.
+ *  Use at your own peril.
+ *
+ *  # Example use
+ *  ```
+ *  let seed: u64 = 12345; // or any u64 seed, to taste
+ *  let mut pcg = Pcg::seed_from_u64(seed);
+ *  
+ *  let x = pcg.next_u32();
+ *
+ *  let mut other_pcg = pcg.new_stream();
+ *  let y = other_pcg.next_u32();
+ *
+ *  assert_ne!(x, y);
+ *  ```
+ */
 /// 8^20 + 3, an arbitrary number that provides an acceptable period
 const MULTIPLIER: u64 = 0x1000000000000003;
 /// the inverse of MULTIPLIER; (MULTIPLIER*INVERSE)%(2^64) = 1
@@ -21,6 +45,7 @@ impl Pcg {
         self.state
     }
 
+    /// Advances the state by n steps, as if calling next_u32() n times
     pub fn skip(&mut self, n: i32) {
         if n == 0 {
             return;
@@ -37,14 +62,23 @@ impl Pcg {
         }
         self.state = state.0;
     }
+
+    /// Creates a new Pcg instance with a unique state seeded from the
+    /// output of this Pcg instance.
+    pub fn new_stream(&mut self) -> Pcg {
+        Self::seed_from_u64(self.next_u64())
+    }
 }
 
 impl RngCore for Pcg {
+    /// Generate a random u32, advancing the state one step.
     fn next_u32(&mut self) -> u32 {
         self.state = (Wrapping(self.state) * Wrapping(MULTIPLIER)).0;
         ((self.state ^ (self.state >> 22)) >> (22 + (self.state >> 61))) as u32
     }
 
+    /// Generate a random u64. Note that this advances the state
+    /// two steps, as each step only provides 32 bits of output.
     fn next_u64(&mut self) -> u64 {
         ((self.next_u32() as u64) << 32) ^ (self.next_u32() as u64)
     }
@@ -191,5 +225,17 @@ mod tests {
         assert_eq!(child.next_u64(), parent.next_u64());
         parent.skip(1);
         assert_ne!(child.next_u64(), parent.next_u64());
+    }
+
+    #[test]
+    fn test_new_stream() {
+        let mut parent = Pcg::seed_from_u64(rand::random::<u64>());
+        let mut child = parent.new_stream();
+
+        parent.skip(-2);
+        let seed = parent.next_u64();
+        let state = (Wrapping(seed) * Wrapping(MULTIPLIER)).0;
+        let next = ((state ^ (state >> 22)) >> (22 + (state >> 61))) as u32;
+        assert_eq!(child.next_u32(), next);
     }
 }
