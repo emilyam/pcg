@@ -54,7 +54,9 @@ impl SeedableRng for Pcg {
     }
 
     fn seed_from_u64(seed: u64) -> Self {
-        Self { state: seed }
+        Self {
+            state: if seed == 0 { 1 } else { seed }, // must not have zero as state
+        }
     }
 }
 
@@ -145,5 +147,16 @@ mod tests {
         let mut pcg = Pcg::seed_from_u64(seed);
         pcg.skip(1);
         assert_eq!(pcg.next_u64(), next);
+    }
+
+    #[test]
+    fn test_no_zeroes_in_state() {
+        let mut pcg = Pcg::seed_from_u64(0);
+        assert_ne!(pcg.get_state(), 0);
+
+        for _ in 0..100 {
+            pcg.skip(1);
+            assert_ne!(pcg.get_state(), 0);
+        }
     }
 }
