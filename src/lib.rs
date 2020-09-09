@@ -115,8 +115,8 @@ impl AsMut<[u8]> for PcgSeed {
 fn arr_to_u64(mut arr: PcgSeed) -> u64 {
     let mut seed: u64 = 0;
     let mutarr = PcgSeed::as_mut(&mut arr);
-    for i in 0..(BYTE_LEN) {
-        seed ^= (mutarr[i] as u64) << 8 * i;
+    for (i, byte) in mutarr.iter().enumerate() {
+        seed ^= (*byte as u64) << (8 * i);
     }
     seed
 }
