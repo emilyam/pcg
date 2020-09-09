@@ -8,6 +8,7 @@ pub struct PcgSeed(pub [u8; BYTE_LEN]);
 use rand_core::*;
 use std::num::Wrapping;
 
+#[derive(Clone)]
 pub struct Pcg {
     state: u64,
 }
@@ -158,5 +159,14 @@ mod tests {
             pcg.skip(1);
             assert_ne!(pcg.get_state(), 0);
         }
+    }
+
+    #[test]
+    fn test_clone() {
+        let mut parent = Pcg::seed_from_u64(rand::random::<u64>());
+        let mut child = parent.clone();
+        assert_eq!(child.next_u64(), parent.next_u64());
+        parent.skip(1);
+        assert_ne!(child.next_u64(), parent.next_u64());
     }
 }
