@@ -1,5 +1,7 @@
-// 8^20 + 3, an arbitrary number that provides an acceptable cycle length
+/// 8^20 + 3, an arbitrary number that provides an acceptable period
 const MULTIPLIER: u64 = 0x1000000000000003;
+/// the inverse of MULTIPLIER; (MULTIPLIER*INVERSE)%(2^64) = 1
+const INVERSE: u64 = 0x1AAAAAAAAAAAAAAB;
 const BYTE_LEN: usize = 8;
 
 #[derive(Default)]
@@ -20,11 +22,20 @@ impl Pcg {
     }
 
     pub fn skip(&mut self, n: i32) {
-        let mut x = Wrapping(self.state);
-        for _ in 0..n {
-            x *= Wrapping(MULTIPLIER);
+        if n == 0 {
+            return;
         }
-        self.state = x.0;
+        let mut state = Wrapping(self.state);
+        if n > 0 {
+            for _ in 0..n {
+                state *= Wrapping(MULTIPLIER);
+            }
+        } else {
+            for _ in n..0 {
+                state *= Wrapping(INVERSE);
+            }
+        }
+        self.state = state.0;
     }
 }
 
@@ -148,6 +159,15 @@ mod tests {
         let mut pcg = Pcg::seed_from_u64(seed);
         pcg.skip(1);
         assert_eq!(pcg.next_u64(), next);
+    }
+
+    #[test]
+    fn test_skip_backwards() {
+        let seed = rand::random::<u64>();
+        let mut pcg = Pcg::seed_from_u64(seed);
+        pcg.skip(3);
+        pcg.skip(-3);
+        assert_eq!(pcg.get_state(), seed);
     }
 
     #[test]
